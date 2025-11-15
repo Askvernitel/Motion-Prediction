@@ -167,9 +167,7 @@ class PoseTracker:
         """Release resources"""
         self.pose.close()
 
-
-# Example usage
-if __name__ == "__main__":
+def run():
     tracker = PoseTracker(buffer_size=30, fps=30)
 
     cap = cv2.VideoCapture(0)

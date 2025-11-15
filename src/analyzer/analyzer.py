@@ -11,8 +11,8 @@ import errors.error_handler as err
 import os
 # Hand is near torso - do something
 
-# ============ FACE ============
 
+THRESHOLD_SUSPICIOUS_MOVEMENT = 0.1
 
 NOSE = 0
 LEFT_EYE_INNER = 1
@@ -520,8 +520,10 @@ class PoseTracker:
                 for p in pts:
                     cv2.circle(frame, tuple(p), 3, (255, 0, 0), -1)
             if detection["left_hand"] or detection["right_hand"]:
+                self.error_counter.set_error_type("Suspicious Body Movement Near Torso")
                 self.error_counter.count(res.pose_landmarks)
-                pass
+                y_offset = 30
+                cv2.putText(frame, f"IN AREA OF WEAPON", (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
             """if (self.has_knife(self.get_landmark_position(23), self.get_landmark_position(19))):
                 mp.solutions.drawing_utils.draw_landmarks(
                     frame,
@@ -580,8 +582,6 @@ def run():
 
         # Display scores
         y_offset = 30
-        #cv2.putText(frame, f"Mode: SCORING ({tracker.current_target})",
-                   # (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
         y_offset += 35
         #cv2.putText(frame, f"Total Score: {scores['total_score']:.1f}/100",
@@ -601,17 +601,6 @@ def run():
             y_offset += 35
             cv2.putText(frame, "POSE LOCKED!",
                         (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 3)
-
-        # Show worst landmarks (optional)
-        worst = tracker.get_worst_landmarks(n=3)
-        if worst and scores['position_score'] < 90:
-            y_offset += 35
-            cv2.putText(frame, "Fix landmarks:",
-                        (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 255), 1)
-            for idx, dist in worst:
-                y_offset += 20
-                cv2.putText(frame, f"  #{idx}: {dist:.3f}",
-                            (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 150, 255), 1)
 
         cv2.imshow("Pose Scoring System", frame)
         k = cv2.waitKey(1) & 0xFF

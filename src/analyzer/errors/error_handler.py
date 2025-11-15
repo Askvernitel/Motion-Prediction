@@ -1,23 +1,31 @@
 import os
 import csv
 import threading
+import simpleaudio
 from datetime import datetime
-
-from playsound import playsound
 MAX_SEC_ERROR = 3
 
 lock = threading.Lock()
+_alarm_lock = threading.Lock()
+_alarm_wave = None
+SOUND_PATH = os.path.join(os.getcwd(), "src", "analyzer", "sounds", "sound1.wav")
+
 def playAlarm():
-    if lock.acquire(blocking=False):
-        try:
-            print("Playing sound...")
-            playsound(os.getcwd() + "/src" + "/analyzer" + "/sounds" + "/sound1.mp3")
-        finally:
-            lock.release()
-    else:
-        print("Another thread is already playing the sound, skipping.")
-    print("Starting asynchronous task...")
-    print("Asynchronous task finished.")
+    global _alarm_wave
+
+    if not _alarm_lock.acquire(blocking=False):
+        return
+
+    try:
+        if _alarm_wave is None:
+            _alarm_wave = simpleaudio.WaveObject.from_wave_file(SOUND_PATH)
+
+        obj = _alarm_wave.play()
+        obj.wait_done()
+
+    finally:
+        _alarm_lock.release()
+
 class LoggerInput:
     def __init__(self, error="Unknown", **kwargs):
         self.error = error

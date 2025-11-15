@@ -1,10 +1,23 @@
 import os
 import csv
+import threading
 from datetime import datetime
 
+from playsound import playsound
 MAX_SEC_ERROR = 3
 
-
+lock = threading.Lock()
+def playAlarm():
+    if lock.acquire(blocking=False):
+        try:
+            print("Playing sound...")
+            playsound(os.getcwd() + "/src" + "/analyzer" + "/sounds" + "/sound1.mp3")
+        finally:
+            lock.release()
+    else:
+        print("Another thread is already playing the sound, skipping.")
+    print("Starting asynchronous task...")
+    print("Asynchronous task finished.")
 class LoggerInput:
     def __init__(self, error="Unknown", **kwargs):
         self.error = error
@@ -73,7 +86,11 @@ class ErrorCounter:
     def reset_frame_counter(self):
         """Reset the error frame counter"""
         self.error_frame_count = 0
+    def set_error_type(self, error_type):
+        self.error_type = error_type
 
+    def handle_error_draw(self):
+        pass
     def is_error(self, pos=None):
         """Check if error threshold exceeded"""
         error_sec_amount = self.error_frame_count // self.fps
@@ -88,12 +105,13 @@ class ErrorCounter:
                 duration_seconds=error_sec_amount
             )
             self.logger.write_file(log_input)
+            threading.Thread(target=playAlarm, daemon=True).start()
             print(f"ERROR: {self.error_type} exceeded {MAX_SEC_ERROR} seconds")
             self.reset_frame_counter()
             return True
         return False
 
-    def count(self, pos=None):
+    def count(self, pos=None, frame = None):
         """Increment error frame count and check threshold"""
         self.error_frame_count += 1
         print("ERROR FRAME COUNT", self.error_frame_count )

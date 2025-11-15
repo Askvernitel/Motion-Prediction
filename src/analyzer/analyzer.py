@@ -7,25 +7,13 @@ from datetime import datetime
 import cv2
 import mediapipe as mp
 import numpy as np
-from playsound import playsound
 import errors.error_handler as err
 import os
 # Hand is near torso - do something
 
 # ============ FACE ============
 
-lock = threading.Lock()
-def playAlarm():
-    if lock.acquire(blocking=False):
-        try:
-            print("Playing sound...")
-            playsound(os.getcwd() + "/src" + "/analyzer" + "/sounds" + "/sound1.mp3")
-        finally:
-            lock.release()
-    else:
-        print("Another thread is already playing the sound, skipping.")
-    print("Starting asynchronous task...")
-    print("Asynchronous task finished.")
+
 NOSE = 0
 LEFT_EYE_INNER = 1
 LEFT_EYE = 2
@@ -167,23 +155,6 @@ class HandTorsoDetector:
 
 
 class PoseTracker:
-    MAX_DIST_KNIFE = 0.1
-    DETECT_KNIFE_SEC = 3
-    suspiciousCount = 0
-    def has_knife(self, pos1, pos2):
-
-        return self.distance_numpy(pos1,pos2)
-    # from datetime import datetime
-    def distance_numpy(self,pos1, pos2):
-        pos1 = np.array(pos1[0:2])
-        pos2 = np.array(pos2[0:2])
-        dist = np.linalg.norm(pos1 - pos2)
-        print("SUS", self.suspiciousCount//self.FPS)
-        if((self.suspiciousCount // self.FPS) >= self.DETECT_KNIFE_SEC):
-            return True
-        if (dist < self.MAX_DIST_KNIFE):
-            self.suspiciousCount += 1
-        return False
 
     def __init__(self, buffer_size=30, fps=30, error_counter:err.ErrorCounter=None):
         self.mp_pose = mp.solutions.pose
@@ -513,7 +484,7 @@ class PoseTracker:
         if res.pose_landmarks:
             lm = res.pose_landmarks.landmark
             detector = HandTorsoDetector()
-            detection = detector.is_hand_near_torso(res.pose_landmarks, threshold=0.05)
+            detection = detector.is_hand_near_torso(res.pose_landmarks, threshold=0.1)
 
             # Convert to NumPy
             arr = np.fromiter((v for p in lm for v in (p.x, p.y, p.z)),
@@ -550,7 +521,6 @@ class PoseTracker:
                     cv2.circle(frame, tuple(p), 3, (255, 0, 0), -1)
             if detection["left_hand"] or detection["right_hand"]:
                 self.error_counter.count(res.pose_landmarks)
-                #threading.Thread(target=playAlarm, daemon=True).start()
                 pass
             """if (self.has_knife(self.get_landmark_position(23), self.get_landmark_position(19))):
                 mp.solutions.drawing_utils.draw_landmarks(

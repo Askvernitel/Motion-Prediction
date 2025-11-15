@@ -8,7 +8,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from playsound import playsound
-import errors as err
+import errors.error_handler as err
 import os
 # Hand is near torso - do something
 
@@ -72,6 +72,7 @@ RIGHT_FOOT_INDEX = 32
 
 
 class HandTorsoDetector:
+
     def __init__(self):
         self.mp_pose = mp.solutions.pose
 
@@ -184,8 +185,9 @@ class PoseTracker:
             self.suspiciousCount += 1
         return False
 
-    def __init__(self, buffer_size=30, fps=30):
+    def __init__(self, buffer_size=30, fps=30, error_counter:err.ErrorCounter=None):
         self.mp_pose = mp.solutions.pose
+        self.error_counter = error_counter
         self.pose = self.mp_pose.Pose(
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5,
@@ -547,7 +549,8 @@ class PoseTracker:
                 for p in pts:
                     cv2.circle(frame, tuple(p), 3, (255, 0, 0), -1)
             if detection["left_hand"] or detection["right_hand"]:
-                threading.Thread(target=playAlarm, daemon=True).start()
+                self.error_counter.count(res.pose_landmarks)
+                #threading.Thread(target=playAlarm, daemon=True).start()
                 pass
             """if (self.has_knife(self.get_landmark_position(23), self.get_landmark_position(19))):
                 mp.solutions.drawing_utils.draw_landmarks(
@@ -575,7 +578,9 @@ class PoseTracker:
 
 
 def run():
-    tracker = PoseTracker(buffer_size=30, fps=30)
+    logger = err.Logger()
+    error_counter= err.ErrorCounter(fps=30, logger=logger)
+    tracker = PoseTracker(buffer_size=30, fps=30, error_counter=error_counter)
 
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
@@ -598,10 +603,10 @@ def run():
         frame = cv2.flip(frame, 1)
         frame = tracker.process_frame(frame)
 
-        errorCounter= ErrorCounter(fps=30)
         # SCORING SYSTEM USAGE EXAMPLES:
-            # Get pose scores
+        # Get pose scores
         scores = tracker.calculate_pose_score()
+
 
         # Display scores
         y_offset = 30

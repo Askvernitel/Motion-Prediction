@@ -79,6 +79,8 @@ class ErrorCounter:
         error_sec_amount = self.error_frame_count // self.fps
         if error_sec_amount >= MAX_SEC_ERROR:
             # Log the error
+            print("POS", pos)
+            self.errors += 1
             log_input = LoggerInput(
                 error=self.error_type,
                 position=str(pos) if pos else "N/A",
@@ -94,7 +96,8 @@ class ErrorCounter:
     def count(self, pos=None):
         """Increment error frame count and check threshold"""
         self.error_frame_count += 1
-        self.errors += 1
+        print("ERROR FRAME COUNT", self.error_frame_count )
+        print("ERROR POS", str(pos))
         return self.is_error(pos)
 
 

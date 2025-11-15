@@ -8,6 +8,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from playsound import playsound
+import errors as err
 import os
 # Hand is near torso - do something
 
@@ -131,7 +132,7 @@ class HandTorsoDetector:
             "right_distance": float(right_dist)
         }
 
-    def get_torso_region(self, landmarks, margin=0.1):
+    def get_torso_region(self, landmarks, margin=0.05):
         """
         Returns the bounding box of the torso region.
         Useful for visualization or more complex checks.
@@ -170,7 +171,7 @@ class PoseTracker:
     suspiciousCount = 0
     def has_knife(self, pos1, pos2):
 
-        return self.distance_numpy(pos1,pos2);
+        return self.distance_numpy(pos1,pos2)
     # from datetime import datetime
     def distance_numpy(self,pos1, pos2):
         pos1 = np.array(pos1[0:2])
@@ -510,7 +511,7 @@ class PoseTracker:
         if res.pose_landmarks:
             lm = res.pose_landmarks.landmark
             detector = HandTorsoDetector()
-            detection = detector.is_hand_near_torso(res.pose_landmarks, threshold=0.15)
+            detection = detector.is_hand_near_torso(res.pose_landmarks, threshold=0.05)
 
             # Convert to NumPy
             arr = np.fromiter((v for p in lm for v in (p.x, p.y, p.z)),
@@ -597,53 +598,45 @@ def run():
         frame = cv2.flip(frame, 1)
         frame = tracker.process_frame(frame)
 
+        errorCounter= ErrorCounter(fps=30)
         # SCORING SYSTEM USAGE EXAMPLES:
-        if mode == "scoring" and tracker.current_target:
             # Get pose scores
-            scores = tracker.calculate_pose_score()
+        scores = tracker.calculate_pose_score()
 
-            if scores:
-                # Display scores
-                y_offset = 30
-                cv2.putText(frame, f"Mode: SCORING ({tracker.current_target})",
-                            (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        # Display scores
+        y_offset = 30
+        #cv2.putText(frame, f"Mode: SCORING ({tracker.current_target})",
+                   # (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-                y_offset += 35
-                cv2.putText(frame, f"Total Score: {scores['total_score']:.1f}/100",
-                            (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        y_offset += 35
+        #cv2.putText(frame, f"Total Score: {scores['total_score']:.1f}/100",
+                   # (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
-                y_offset += 30
-                cv2.putText(frame, f"Position: {scores['position_score']:.1f}",
-                            (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 200, 100), 2)
+        y_offset += 30
+        #cv2.putText(frame, f"Position: {scores['position_score']:.1f}",
+                   # (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 200, 100), 2)
 
-                y_offset += 30
-                cv2.putText(frame, f"Stability: {scores['stability_score']:.1f}",
-                            (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 200, 255), 2)
+        y_offset += 30
+        #cv2.putText(frame, f"Stability: {scores['stability_score']:.1f}",
+        #            (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (100, 200, 255), 2)
 
-                # Check if pose is locked
-                is_locked = tracker.is_pose_locked()
-                if is_locked:
-                    y_offset += 35
-                    cv2.putText(frame, "POSE LOCKED!",
-                                (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 3)
+        # Check if pose is locked
+        is_locked = tracker.is_pose_locked()
+        if is_locked:
+            y_offset += 35
+            cv2.putText(frame, "POSE LOCKED!",
+                        (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 3)
 
-                # Show worst landmarks (optional)
-                worst = tracker.get_worst_landmarks(n=3)
-                if worst and scores['position_score'] < 90:
-                    y_offset += 35
-                    cv2.putText(frame, "Fix landmarks:",
-                                (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 255), 1)
-                    for idx, dist in worst:
-                        y_offset += 20
-                        cv2.putText(frame, f"  #{idx}: {dist:.3f}",
-                                    (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 150, 255), 1)
-        else:
-            cv2.putText(frame, f"Mode: FREEFORM (Press 's' to save pose)",
-                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
-
-            avg_spd = tracker.get_average_speed()
-            cv2.putText(frame, f"Avg Speed: {avg_spd:.2f}",
-                        (10, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        # Show worst landmarks (optional)
+        worst = tracker.get_worst_landmarks(n=3)
+        if worst and scores['position_score'] < 90:
+            y_offset += 35
+            cv2.putText(frame, "Fix landmarks:",
+                        (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 100, 255), 1)
+            for idx, dist in worst:
+                y_offset += 20
+                cv2.putText(frame, f"  #{idx}: {dist:.3f}",
+                            (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 150, 255), 1)
 
         cv2.imshow("Pose Scoring System", frame)
         k = cv2.waitKey(1) & 0xFF
@@ -655,7 +648,6 @@ def run():
             if tracker.save_target_pose("target_pose"):
                 tracker.set_target_pose("target_pose")
                 print("✓ Target pose saved!")
-                mode = "scoring"
         elif k == ord('t'):
             mode = "scoring"
             print("Switched to scoring mode")

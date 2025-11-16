@@ -72,55 +72,98 @@ def playAlarm():
 # ============================================================
 # HAND–TORSO DETECTOR
 # ============================================================
-
 class HandTorsoDetector:
+
     def __init__(self):
         self.mp_pose = mp.solutions.pose
 
     def is_hand_near_torso(self, landmarks, threshold=0.05):
+        """
+        Detects if either hand is near the torso area.
+
+        Args:
+            landmarks: pose_landmarks from MediaPipe
+            threshold: distance threshold (normalized, default 0.15)
+
+        Returns:
+            dict with detection results for left and right hands
+        """
         if not landmarks:
             return {"left_hand": False, "right_hand": False}
 
+        # Get key landmark positions
         lm = landmarks.landmark
 
-        # wrists
-        lw = np.array([
-            lm[self.mp_pose.PoseLandmark.LEFT_WRIST].x,
-            lm[self.mp_pose.PoseLandmark.LEFT_WRIST].y
-        ])
-        rw = np.array([
-            lm[self.mp_pose.PoseLandmark.RIGHT_WRIST].x,
-            lm[self.mp_pose.PoseLandmark.RIGHT_WRIST].y
-        ])
+        # Hand landmarks
+        left_wrist = np.array([lm[self.mp_pose.PoseLandmark.LEFT_WRIST].x,
+                               lm[self.mp_pose.PoseLandmark.LEFT_WRIST].y,
+                               lm[self.mp_pose.PoseLandmark.LEFT_WRIST].z])
 
-        # torso center
-        ls = np.array([
-            lm[self.mp_pose.PoseLandmark.LEFT_SHOULDER].x,
-            lm[self.mp_pose.PoseLandmark.LEFT_SHOULDER].y
-        ])
-        rs = np.array([
-            lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER].x,
-            lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER].y
-        ])
-        lh = np.array([
-            lm[self.mp_pose.PoseLandmark.LEFT_HIP].x,
-            lm[self.mp_pose.PoseLandmark.LEFT_HIP].y
-        ])
-        rh = np.array([
-            lm[self.mp_pose.PoseLandmark.RIGHT_HIP].x,
-            lm[self.mp_pose.PoseLandmark.RIGHT_HIP].y
-        ])
+        right_wrist = np.array([lm[self.mp_pose.PoseLandmark.RIGHT_WRIST].x,
+                                lm[self.mp_pose.PoseLandmark.RIGHT_WRIST].y,
+                                lm[self.mp_pose.PoseLandmark.RIGHT_WRIST].z])
 
-        torso = (ls + rs + lh + rh) / 4.0
+        # Torso reference points (shoulders and hips for torso bounding)
+        left_shoulder = np.array([lm[self.mp_pose.PoseLandmark.LEFT_SHOULDER].x,
+                                  lm[self.mp_pose.PoseLandmark.LEFT_SHOULDER].y,
+                                  lm[self.mp_pose.PoseLandmark.LEFT_SHOULDER].z])
 
-        ld = np.linalg.norm(lw - torso)
-        rd = np.linalg.norm(rw - torso)
+        right_shoulder = np.array([lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER].x,
+                                   lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER].y,
+                                   lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER].z])
+
+        left_hip = np.array([lm[self.mp_pose.PoseLandmark.LEFT_HIP].x,
+                             lm[self.mp_pose.PoseLandmark.LEFT_HIP].y,
+                             lm[self.mp_pose.PoseLandmark.LEFT_HIP].z])
+
+        right_hip = np.array([lm[self.mp_pose.PoseLandmark.RIGHT_HIP].x,
+                              lm[self.mp_pose.PoseLandmark.RIGHT_HIP].y,
+                              lm[self.mp_pose.PoseLandmark.RIGHT_HIP].z])
+
+        # Define torso center and bounds
+        torso_center = (left_shoulder + right_shoulder + left_hip + right_hip) / 4
+
+        # Calculate distances (using 2D for faster computation)
+        left_dist = np.linalg.norm(left_wrist[:2] - torso_center[:2])
+        right_dist = np.linalg.norm(right_wrist[:2] - torso_center[:2])
 
         return {
-            "left_hand": ld < threshold,
-            "right_hand": rd < threshold,
-            "left_distance": float(ld),
-            "right_distance": float(rd),
+            "left_hand": left_dist < threshold,
+            "right_hand": right_dist < threshold,
+            "left_distance": float(left_dist),
+            "right_distance": float(right_dist)
+        }
+
+    def get_torso_region(self, landmarks, margin=0.05):
+        """
+        Returns the bounding box of the torso region.
+        Useful for visualization or more complex checks.
+        """
+        if not landmarks:
+            return None
+
+        lm = landmarks.landmark
+
+        # Get torso corners
+        shoulder_left = lm[self.mp_pose.PoseLandmark.LEFT_SHOULDER]
+        shoulder_right = lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER]
+        hip_left = lm[self.mp_pose.PoseLandmark.LEFT_HIP]
+        hip_right = lm[self.mp_pose.PoseLandmark.RIGHT_HIP]
+
+        # Calculate bounding box with margin
+        x_coords = [shoulder_left.x, shoulder_right.x, hip_left.x, hip_right.x]
+        y_coords = [shoulder_left.y, shoulder_right.y, hip_left.y, hip_right.y]
+
+        min_x = min(x_coords) - margin
+        max_x = max(x_coords) + margin
+        min_y = min(y_coords) - margin
+        max_y = max(y_coords) + margin
+
+        return {
+            "min_x": min_x,
+            "max_x": max_x,
+            "min_y": min_y,
+            "max_y": max_y
         }
 
 

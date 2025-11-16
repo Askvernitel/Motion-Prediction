@@ -1,9 +1,29 @@
 import os
 import csv
 import threading
+from math import trunc
+
 import simpleaudio
 from datetime import datetime
+
+#from src.analyzer.action_detector import ACT_LOOKING_OVER_LEFT_SHOULDER, ACT_LOOKING_OVER_RIGHT_SHOULDER, \
+#    ACT_IN_AREA_WEAPON, ACT_LEFT_PUNCH_FORWARD, ACT_RIGHT_PUNCH_FORWARD, ACT_RIGHT_PUNCH_SIDE, ACT_LEFT_PUNCH_SIDE
+
+
+ACT_LOOKING_OVER_LEFT_SHOULDER = "LOOKING OVER LEFT SHOULDER"
+ACT_LOOKING_OVER_RIGHT_SHOULDER = "LOOKING OVER RIGHT SHOULDER"
+ACT_LEFT_PUNCH_FORWARD = "LEFT PUNCH FORWARD"
+ACT_LEFT_PUNCH_SIDE = "LEFT PUNCH SIDE"
+ACT_RIGHT_PUNCH_SIDE = "RIGHT PUNCH SIDE"
+ACT_RIGHT_PUNCH_FORWARD = "RIGHT PUNCH FORWARD"
+ACT_IN_AREA_WEAPON = "IN AREA WEAPON"
 MAX_SEC_ERROR = 3
+
+#it is kind of frames
+ERROR_SENSITIVITY_PUNCH = 4
+ERROR_SENSITIVITY_LEFT_SHOULDER = 5
+ERROR_SENSITIVITY_RIGHT_SHOULDER = 5
+ERROR_SENSITIVITY_WEAPON_AREA = 1
 
 lock = threading.Lock()
 _alarm_lock = threading.Lock()
@@ -26,6 +46,14 @@ def playAlarm():
     finally:
         _alarm_lock.release()
 
+class ErrorBundle:
+    level_of_error = 0
+    error_type = "Unknown"
+    extra_info = ""
+    def __init__(self, level_of_error =0 , error_type="Unknown", extra_info=""):
+        self.level_of_error = level_of_error
+        self.error_type = error_type
+        self.extra_info = extra_info
 class LoggerInput:
     def __init__(self, error="Unknown", **kwargs):
         self.error = error
@@ -105,19 +133,36 @@ class ErrorCounter:
         if error_sec_amount >= MAX_SEC_ERROR:
             # Log the error
             print("POS", pos)
-            self.errors += 1
-            log_input = LoggerInput(
-                error=self.error_type,
-                position=str(pos) if pos else "N/A",
-                error_count=self.errors,
-                duration_seconds=error_sec_amount
-            )
-            self.logger.write_file(log_input)
-            threading.Thread(target=playAlarm, daemon=True).start()
-            print(f"ERROR: {self.error_type} exceeded {MAX_SEC_ERROR} seconds")
-            self.reset_frame_counter()
+            self.handle_error(pos,error_sec_amount)
             return True
         return False
+    def handle_error(self, pos, error_sec_amount=0, play_alarm = True):
+        self.errors += 1
+        log_input = LoggerInput(
+            error=self.error_type,
+            position=str(pos) if pos else "N/A",
+            error_count=self.errors,
+            duration_seconds=error_sec_amount
+        )
+        self.logger.write_file(log_input)
+        if play_alarm:
+            threading.Thread(target=playAlarm, daemon=True).start()
+        print(f"ERROR: {self.error_type} exceeded {MAX_SEC_ERROR} seconds")
+        self.reset_frame_counter()
+
+    def handle_error_bundle(self, err:ErrorBundle, play_alarm = False):
+        self.errors += 1
+        log_input = LoggerInput(
+            error=err.error_type,
+            extra_info=str(err.extra_info) if err.extra_info else "N/A",
+            error_count=self.errors,
+            level_of_error=err.level_of_error,
+        )
+        self.logger.write_file(log_input)
+        if play_alarm:
+            threading.Thread(target=playAlarm, daemon=True).start()
+        print(f"ERROR: {self.error_type} exceeded {MAX_SEC_ERROR} seconds")
+        #self.reset_frame_counter()
 
     def count(self, pos=None, frame = None):
         """Increment error frame count and check threshold"""
@@ -126,6 +171,45 @@ class ErrorCounter:
         print("ERROR POS", str(pos))
         return self.is_error(pos)
 
+class ErrorService:
+    def __init__(self):
+        self.error_counter = ErrorCounter()
+    def get_error_count(self):
+        pass
+    def check_suspicious_head_movement(self, acts):
+        error_bundle = ErrorBundle(error_type="SUSPICIOUS HEAD MOVEMENT")
+        amount_left_head = 0
+        amount_right_head = 0
+        for act in acts:
+            if ACT_LOOKING_OVER_LEFT_SHOULDER in act:
+                amount_left_head += 1
+            if ACT_LOOKING_OVER_RIGHT_SHOULDER in act:
+                amount_right_head += 1
+        print("####################")
+        print(amount_left_head, amount_right_head)
+        print("####################")
+        if amount_left_head >=ERROR_SENSITIVITY_LEFT_SHOULDER and amount_right_head >=ERROR_SENSITIVITY_RIGHT_SHOULDER:
+            error_bundle.level_of_error=amount_left_head + amount_right_head
+            self.error_counter.handle_error_bundle(error_bundle, play_alarm=True)
+    def check_suspicious_punch_movement(self,acts):
+
+        error_bundle = ErrorBundle(error_type="SUSPICIOUS PUNCH MOVEMENT")
+
+        near_weapon_call = 0
+        punch_call = 0
+        for act in acts:
+            if ACT_IN_AREA_WEAPON in act:
+                near_weapon_call += 1
+            if ACT_LEFT_PUNCH_FORWARD in act or ACT_RIGHT_PUNCH_FORWARD in act or ACT_RIGHT_PUNCH_SIDE in act or ACT_LEFT_PUNCH_SIDE in act:
+                punch_call += 1
+        if near_weapon_call >=2 and punch_call >=2:
+            #self.error_counter.handle_error_bundle(error_bundle)
+            error_bundle.level_of_error=punch_call+near_weapon_call
+            self.error_counter.handle_error_bundle(error_bundle, play_alarm=True)
+
+    def check_error(self, act_history):
+        self.check_suspicious_head_movement(act_history)
+        self.check_suspicious_punch_movement(act_history)
 
 #INPUTIS MAGALITI AQ ARIS LOGGERISTVIS
 """

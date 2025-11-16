@@ -124,6 +124,10 @@ def main():
         # -----------------------------------------------------------
         if actions:
             print(" | ".join(actions))
+        error_service.set_current_frame(frame,landmarks)
+        print("SHULD FLAG:", error_service.should_flag())
+        if error_service.should_flag():
+            error_service.flag_frames()
 
         y = 30
         for act in actions:

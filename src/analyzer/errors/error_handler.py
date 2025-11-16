@@ -2,8 +2,9 @@ import os
 import csv
 import threading
 from math import trunc
-
+import mediapipe as mp
 import simpleaudio
+import cv2
 from datetime import datetime
 
 #from src.analyzer.action_detector import ACT_LOOKING_OVER_LEFT_SHOULDER, ACT_LOOKING_OVER_RIGHT_SHOULDER, \
@@ -20,7 +21,7 @@ ACT_IN_AREA_WEAPON = "IN AREA WEAPON"
 MAX_SEC_ERROR = 3
 
 #it is kind of frames
-ERROR_SENSITIVITY_PUNCH = 4
+ERROR_SENSITIVITY_PUNCH = 1
 ERROR_SENSITIVITY_LEFT_SHOULDER = 5
 ERROR_SENSITIVITY_RIGHT_SHOULDER = 5
 ERROR_SENSITIVITY_WEAPON_AREA = 1
@@ -172,10 +173,76 @@ class ErrorCounter:
         return self.is_error(pos)
 
 class ErrorService:
-    def __init__(self):
+    def __init__(self, flag_frame_amount = 180):
+        self.frame = None
+        self.landmarks= None
+        self.flag_frame_amount = flag_frame_amount
+        self.current_flag_frame_amount = flag_frame_amount
+        self.flagged = False
         self.error_counter = ErrorCounter()
     def get_error_count(self):
         pass
+    def reset_flag_frame_amount(self):
+        if self.current_flag_frame_amount <= 0:
+            self.flagged=False
+            self.current_flag_frame_amount = self.flag_frame_amount
+    def set_current_frame(self, frame = None, landmarks=None):
+        self.frame =  frame
+        self.landmarks = landmarks
+    def should_flag(self):
+        return self.flagged
+    def flag_frames(self):
+        if self.current_flag_frame_amount <= 0:
+            return
+        if self.landmarks is None:
+            return
+        lm = self.landmarks.landmark
+        frame = self.frame
+        h, w = frame.shape[:2]
+        size = 3  # Move this here, outside the loop
+        # Get bounding box coordinates for the entire body
+        x_coords = [int(landmark.x * w) for landmark in lm]
+        y_coords = [int(landmark.y * h) for landmark in lm]
+
+        # Find min/max to create bounding box
+        x_min = min(x_coords)
+        x_max = max(x_coords)
+        y_min = min(y_coords)
+        y_max = max(y_coords)
+
+        # Add padding if you want
+        padding = 20
+        x_min = max(0, x_min - padding)
+        y_min = max(0, y_min - padding)
+        x_max = min(w, x_max + padding)
+        y_max = min(h, y_max + padding)
+
+        # Draw RED rectangle around entire body
+        cv2.rectangle(frame, (x_min, y_min), (x_max, y_max),
+                      (0, 0, 255), 3)  # 3 = thickness
+
+        for i, j in mp.solutions.pose.POSE_CONNECTIONS:
+            x1, y1 = int(lm[i].x * w), int(lm[i].y * h)
+            x2, y2 = int(lm[j].x * w), int(lm[j].y * h)
+
+            # Red filled rectangles at each landmark
+            cv2.rectangle(frame, (x1 - size, y1 - size),
+                          (x1 + size, y1 + size),
+                          (0, 0, 255), -1)
+
+            cv2.rectangle(frame, (x2 - size, y2 - size),
+                          (x2 + size, y2 + size),
+                          (0, 0, 255), -1)
+
+            # Red circles (these will overlap the rectangles)
+            cv2.circle(frame, (x1, y1), 3, (0, 0, 255), -1)
+            cv2.circle(frame, (x2, y2), 3, (0, 0, 255), -1)
+
+            # Red line connecting landmarks
+            cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+        self.current_flag_frame_amount -= 1
+        self.reset_flag_frame_amount()
     def check_suspicious_head_movement(self, acts):
         error_bundle = ErrorBundle(error_type="SUSPICIOUS HEAD MOVEMENT")
         amount_left_head = 0
@@ -190,6 +257,7 @@ class ErrorService:
         print("####################")
         if amount_left_head >=ERROR_SENSITIVITY_LEFT_SHOULDER and amount_right_head >=ERROR_SENSITIVITY_RIGHT_SHOULDER:
             error_bundle.level_of_error=amount_left_head + amount_right_head
+            self.flagged  =True
             self.error_counter.handle_error_bundle(error_bundle, play_alarm=True)
     def check_suspicious_punch_movement(self,acts):
 
@@ -204,6 +272,7 @@ class ErrorService:
                 punch_call += 1
         if near_weapon_call >=2 and punch_call >=2:
             #self.error_counter.handle_error_bundle(error_bundle)
+            self.flagged =True
             error_bundle.level_of_error=punch_call+near_weapon_call
             self.error_counter.handle_error_bundle(error_bundle, play_alarm=True)
 
